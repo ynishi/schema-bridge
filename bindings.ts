@@ -4,3 +4,9 @@ export type MyStruct = { name: string; age: number; is_active: boolean; tags: st
 
 export type MyEnum = 'OptionA' | 'OptionB';
 
+export type UserId = string;
+
+export type ExternalStatus = 'Active' | 'Inactive';
+
+export type AppStatus = 'Active' | 'Inactive';
+

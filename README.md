@@ -70,6 +70,22 @@ This follows the pattern used by popular libraries like `serde`.
 - Containers: `Vec<T>`, `Option<T>`
 - Structs with named fields
 - Enums (simple variants)
+- **Newtype pattern**: `struct Wrapper(InnerType)` - delegates to wrapped type
+- Tuple structs: `struct Point(f64, f64)` - generates TypeScript tuples
+
+### Newtype Pattern for External Types
+
+Perfect for wrapping external types you don't control:
+
+```rust
+// Wrap an external enum
+#[derive(Serialize, Deserialize, SchemaBridge)]
+struct MyStatus(external_crate::Status);
+
+// Wrap a primitive for type safety
+#[derive(Serialize, Deserialize, SchemaBridge)]
+struct UserId(String);  // Generates: export type UserId = string;
+```
 
 ## Use with Tauri
 

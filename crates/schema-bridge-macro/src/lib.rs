@@ -42,8 +42,31 @@ fn impl_to_ts(_name: &Ident, data: &Data) -> proc_macro2::TokenStream {
                         let fields = vec![#(#fields_ts),*];
                         format!("{{ {} }}", fields.join(" "))
                     }
-                }
-                _ => quote! { "any".to_string() }, // Tuple structs not supported yet
+                },
+                Fields::Unnamed(fields) => {
+                    // Support for tuple structs, especially newtype pattern
+                    if fields.unnamed.len() == 1 {
+                        // Newtype pattern: delegate to the inner type
+                        let inner_ty = &fields.unnamed[0].ty;
+                        quote! {
+                            <#inner_ty as ::schema_bridge::SchemaBridge>::to_ts()
+                        }
+                    } else {
+                        // Multiple field tuple struct - represent as tuple
+                        let field_types = fields.unnamed.iter().map(|f| {
+                            let ty = &f.ty;
+                            quote! {
+                                <#ty as ::schema_bridge::SchemaBridge>::to_ts()
+                            }
+                        });
+                        
+                        quote! {
+                            let types = vec![#(#field_types),*];
+                            format!("[{}]", types.join(", "))
+                        }
+                    }
+                },
+                Fields::Unit => quote! { "null".to_string() },
             }
         }
         Data::Enum(data) => {
