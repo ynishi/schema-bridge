@@ -95,6 +95,31 @@ Supported transformations:
 - `SCREAMING_SNAKE_CASE`: `MyVariant` → `MY_VARIANT`
 - `kebab-case`: `MyVariant` → `my-variant`
 
+### String Conversion Support
+
+Generate `Display` and `FromStr` implementations for easy string conversion:
+
+```rust
+#[derive(SchemaBridge)]
+#[schema_bridge(string_conversion)]  // Enable Display + FromStr
+#[serde(rename_all = "snake_case")]
+enum TalkStyle {
+    Brainstorm,
+    Casual,
+}
+
+// Usage:
+let style = TalkStyle::Brainstorm;
+let s = style.to_string();  // "brainstorm"
+let parsed: TalkStyle = "casual".parse().unwrap();  // TalkStyle::Casual
+```
+
+Perfect for:
+- String-based APIs
+- Command-line arguments
+- Configuration parsing
+- URL parameters
+
 ### Newtype Pattern for External Types
 
 Perfect for wrapping external types you don't control:
