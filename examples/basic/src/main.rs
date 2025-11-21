@@ -1,4 +1,4 @@
-use schema_bridge::{SchemaBridge, export_types};
+use schema_bridge::{export_types, SchemaBridge};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, SchemaBridge)]
@@ -33,13 +33,14 @@ struct AppStatus(ExternalStatus);
 fn main() {
     // Simple way: use the export_types! macro
     export_types!(
-        "bindings.ts", 
-        MyStruct, 
-        MyEnum, 
-        UserId, 
+        "bindings.ts",
+        MyStruct,
+        MyEnum,
+        UserId,
         ExternalStatus,
         AppStatus
-    ).expect("Failed to write TS file");
-    
+    )
+    .expect("Failed to write TS file");
+
     println!("TypeScript definitions written to bindings.ts");
 }

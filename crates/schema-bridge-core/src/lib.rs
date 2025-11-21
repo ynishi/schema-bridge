@@ -106,7 +106,6 @@ macro_rules! export_types {
     }};
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
