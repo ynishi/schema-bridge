@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "crates/schema-bridge",
+    "crates/schema-bridge-core",
+    "crates/schema-bridge-macro",
+    "examples/basic",
+]
+resolver = "2"

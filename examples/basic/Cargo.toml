@@ -1,0 +1,8 @@
+[package]
+name = "example-basic"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+schema-bridge = { path = "../../crates/schema-bridge" }
+serde = { version = "1.0", features = ["derive"] }
