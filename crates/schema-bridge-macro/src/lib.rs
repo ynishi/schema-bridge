@@ -72,18 +72,18 @@ fn impl_to_ts(input: &DeriveInput) -> proc_macro2::TokenStream {
         Data::Enum(data) => {
             // Check for serde rename_all attribute
             let rename_all = get_serde_rename_all(&input.attrs);
-            
+
             let variants = data.variants.iter().map(|v| {
                 let variant_name = &v.ident;
                 let variant_str = variant_name.to_string();
-                
+
                 // Apply rename_all transformation if present
                 let ts_name = if let Some(ref rule) = rename_all {
                     apply_rename_rule(&variant_str, rule)
                 } else {
                     variant_str
                 };
-                
+
                 quote! {
                     format!("'{}'", #ts_name)
                 }

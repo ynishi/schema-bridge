@@ -13,9 +13,9 @@ enum ConversationMode {
 #[derive(Serialize, Deserialize, SchemaBridge)]
 #[serde(rename_all = "camelCase")]
 enum Status {
-    IsActive,
-    IsPending,
-    IsComplete,
+    Active,
+    Pending,
+    Complete,
 }
 
 #[derive(Serialize, Deserialize, SchemaBridge)]
@@ -42,9 +42,9 @@ mod tests {
     #[test]
     fn test_camel_case_rename() {
         let ts = Status::to_ts();
-        assert!(ts.contains("'isActive'"));
-        assert!(ts.contains("'isPending'"));
-        assert!(ts.contains("'isComplete'"));
+        assert!(ts.contains("'active'"));
+        assert!(ts.contains("'pending'"));
+        assert!(ts.contains("'complete'"));
     }
 
     #[test]
