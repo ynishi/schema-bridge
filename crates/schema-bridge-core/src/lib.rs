@@ -89,6 +89,24 @@ pub fn generate_ts_file(types: Vec<(&str, String)>) -> String {
     content
 }
 
+/// Export types to a TypeScript file
+pub fn export_to_file(types: Vec<(&str, String)>, path: &str) -> std::io::Result<()> {
+    let content = generate_ts_file(types);
+    std::fs::write(path, content)
+}
+
+/// Macro to easily export types to a file
+#[macro_export]
+macro_rules! export_types {
+    ($path:expr, $($name:ident),+ $(,)?) => {{
+        let types = vec![
+            $((stringify!($name), $name::to_ts()),)+
+        ];
+        $crate::export_to_file(types, $path)
+    }};
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

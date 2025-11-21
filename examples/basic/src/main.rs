@@ -1,4 +1,4 @@
-use schema_bridge::{generate_ts_file, SchemaBridge};
+use schema_bridge::{SchemaBridge, export_types};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, SchemaBridge)]
@@ -17,8 +17,8 @@ enum MyEnum {
 }
 
 fn main() {
-    let types = vec![("MyStruct", MyStruct::to_ts()), ("MyEnum", MyEnum::to_ts())];
-
-    let ts_content = generate_ts_file(types);
-    println!("{}", ts_content);
+    // Simple way: use the export_types! macro
+    export_types!("bindings.ts", MyStruct, MyEnum).expect("Failed to write TS file");
+    
+    println!("TypeScript definitions written to bindings.ts");
 }
