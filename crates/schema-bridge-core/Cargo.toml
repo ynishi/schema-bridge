@@ -1,6 +1,6 @@
 [package]
 name = "schema-bridge-core"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Yutaka Nishimura <ytk.nishimura@gmail.com>"]
 description = "Core types and traits for schema-bridge - TypeScript type generation from Rust"
