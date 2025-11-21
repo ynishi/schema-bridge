@@ -40,9 +40,15 @@ mod tests {
 
     #[test]
     fn test_fromstr_snake_case() {
-        assert_eq!("brainstorm".parse::<TalkStyle>().unwrap(), TalkStyle::Brainstorm);
+        assert_eq!(
+            "brainstorm".parse::<TalkStyle>().unwrap(),
+            TalkStyle::Brainstorm
+        );
         assert_eq!("casual".parse::<TalkStyle>().unwrap(), TalkStyle::Casual);
-        assert_eq!("decision_making".parse::<TalkStyle>().unwrap(), TalkStyle::DecisionMaking);
+        assert_eq!(
+            "decision_making".parse::<TalkStyle>().unwrap(),
+            TalkStyle::DecisionMaking
+        );
     }
 
     #[test]
@@ -74,8 +80,14 @@ mod tests {
 
     #[test]
     fn test_fromstr_camel_case() {
-        assert_eq!("highPriority".parse::<Priority>().unwrap(), Priority::HighPriority);
-        assert_eq!("lowPriority".parse::<Priority>().unwrap(), Priority::LowPriority);
+        assert_eq!(
+            "highPriority".parse::<Priority>().unwrap(),
+            Priority::HighPriority
+        );
+        assert_eq!(
+            "lowPriority".parse::<Priority>().unwrap(),
+            Priority::LowPriority
+        );
     }
 
     #[test]

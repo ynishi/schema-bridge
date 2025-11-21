@@ -12,7 +12,7 @@ pub fn derive_schema_bridge(input: TokenStream) -> TokenStream {
 
     // Check for string_conversion attribute
     let string_conversion = has_string_conversion(&input.attrs);
-    
+
     let mut expanded = quote! {
         impl ::schema_bridge::SchemaBridge for #name {
             fn to_ts() -> String {
@@ -30,12 +30,12 @@ pub fn derive_schema_bridge(input: TokenStream) -> TokenStream {
         if let Data::Enum(_) = &input.data {
             let display_impl = impl_display(&input);
             let fromstr_impl = impl_fromstr(&input);
-            
+
             expanded = quote! {
                 #expanded
-                
+
                 #display_impl
-                
+
                 #fromstr_impl
             };
         }
@@ -212,25 +212,25 @@ fn impl_to_schema(_name: &Ident, _data: &Data) -> proc_macro2::TokenStream {
 /// Generate Display implementation for enum
 fn impl_display(input: &DeriveInput) -> proc_macro2::TokenStream {
     let name = &input.ident;
-    
+
     if let Data::Enum(data) = &input.data {
         let rename_all = get_serde_rename_all(&input.attrs);
-        
+
         let match_arms = data.variants.iter().map(|v| {
             let variant_name = &v.ident;
             let variant_str = variant_name.to_string();
-            
+
             let display_str = if let Some(ref rule) = rename_all {
                 apply_rename_rule(&variant_str, rule)
             } else {
                 variant_str
             };
-            
+
             quote! {
                 #name::#variant_name => write!(f, "{}", #display_str)
             }
         });
-        
+
         quote! {
             impl ::std::fmt::Display for #name {
                 fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -248,29 +248,29 @@ fn impl_display(input: &DeriveInput) -> proc_macro2::TokenStream {
 /// Generate FromStr implementation for enum
 fn impl_fromstr(input: &DeriveInput) -> proc_macro2::TokenStream {
     let name = &input.ident;
-    
+
     if let Data::Enum(data) = &input.data {
         let rename_all = get_serde_rename_all(&input.attrs);
-        
+
         let match_arms = data.variants.iter().map(|v| {
             let variant_name = &v.ident;
             let variant_str = variant_name.to_string();
-            
+
             let pattern_str = if let Some(ref rule) = rename_all {
                 apply_rename_rule(&variant_str, rule)
             } else {
                 variant_str
             };
-            
-           quote! {
+
+            quote! {
                 #pattern_str => ::std::result::Result::Ok(#name::#variant_name)
             }
         });
-        
+
         quote! {
             impl ::std::str::FromStr for #name {
                 type Err = String;
-                
+
                 fn from_str(s: &str) -> ::std::result::Result<Self, Self::Err> {
                     match s {
                         #(#match_arms,)*
