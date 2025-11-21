@@ -1,6 +1,6 @@
 [package]
 name = "schema-bridge-macro"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["Yutaka Nishimura <ytk.nishimura@gmail.com>"]
 description = "Procedural macro for schema-bridge - derive TypeScript type definitions from Rust types"
