@@ -72,6 +72,28 @@ This follows the pattern used by popular libraries like `serde`.
 - Enums (simple variants)
 - **Newtype pattern**: `struct Wrapper(InnerType)` - delegates to wrapped type
 - Tuple structs: `struct Point(f64, f64)` - generates TypeScript tuples
+- **Serde attributes**: `#[serde(rename_all = "...")]` for name transformations
+
+### Serde Attribute Support
+
+The library respects `#[serde(rename_all)]` attributes on enums:
+
+```rust
+#[derive(Serialize, Deserialize, SchemaBridge)]
+#[serde(rename_all = "snake_case")]
+enum ConversationMode {
+    Normal,      // → 'normal'
+    Concise,     // → 'concise'
+    Creative,    // → 'creative'
+}
+```
+
+Supported transformations:
+- `snake_case`: `MyVariant` → `my_variant`
+- `camelCase`: `MyVariant` → `myVariant`
+- `PascalCase`: `MyVariant` → `MyVariant` (no change)
+- `SCREAMING_SNAKE_CASE`: `MyVariant` → `MY_VARIANT`
+- `kebab-case`: `MyVariant` → `my-variant`
 
 ### Newtype Pattern for External Types
 
