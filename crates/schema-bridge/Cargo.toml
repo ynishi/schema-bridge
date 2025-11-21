@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/ynishi/tauri-schema"
 keywords = ["typescript", "codegen", "tauri", "bridge", "types"]
 categories = ["development-tools", "web-programming"]
-readme = "../README.md"
+readme = "../../README.md"
 
 [dependencies]
 schema-bridge-core = { version = "0.1.0", path = "../schema-bridge-core" }
