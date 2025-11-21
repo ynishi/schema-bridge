@@ -2,10 +2,17 @@
 name = "schema-bridge"
 version = "0.1.0"
 edition = "2021"
+authors = ["Yutaka Nishimura <ytk.nishimura@gmail.com>"]
+description = "Generate TypeScript type definitions from Rust types - perfect for Tauri applications"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ynishi/tauri-schema"
+keywords = ["typescript", "codegen", "tauri", "bridge", "types"]
+categories = ["development-tools", "web-programming"]
+readme = "../README.md"
 
 [dependencies]
-schema-bridge-core = { path = "../schema-bridge-core" }
-schema-bridge-macro = { path = "../schema-bridge-macro" }
+schema-bridge-core = { version = "0.1.0", path = "../schema-bridge-core" }
+schema-bridge-macro = { version = "0.1.0", path = "../schema-bridge-macro" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

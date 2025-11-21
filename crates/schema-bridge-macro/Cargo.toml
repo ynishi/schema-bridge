@@ -2,6 +2,12 @@
 name = "schema-bridge-macro"
 version = "0.1.0"
 edition = "2021"
+authors = ["Yutaka Nishimura <ytk.nishimura@gmail.com>"]
+description = "Procedural macro for schema-bridge - derive TypeScript type definitions from Rust types"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ynishi/tauri-schema"
+keywords = ["typescript", "codegen", "macro", "tauri", "bridge"]
+categories = ["development-tools", "web-programming"]
 
 [lib]
 proc-macro = true
