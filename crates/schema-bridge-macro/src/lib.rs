@@ -65,11 +65,23 @@ fn impl_to_ts(input: &DeriveInput) -> proc_macro2::TokenStream {
         Data::Struct(data) => {
             match &data.fields {
                 Fields::Named(fields) => {
+                    // Check for serde rename_all attribute on struct
+                    let rename_all = get_serde_rename_all(&input.attrs);
+
                     let fields_ts = fields.named.iter().map(|f| {
                         let field_name = &f.ident;
+                        let field_str = field_name.as_ref().unwrap().to_string();
                         let ty = &f.ty;
+
+                        // Apply rename_all transformation if present
+                        let ts_field_name = if let Some(ref rule) = rename_all {
+                            apply_rename_rule(&field_str, rule)
+                        } else {
+                            field_str
+                        };
+
                         quote! {
-                            format!("{}: {};", stringify!(#field_name), <#ty as ::schema_bridge::SchemaBridge>::to_ts())
+                            format!("{}: {};", #ts_field_name, <#ty as ::schema_bridge::SchemaBridge>::to_ts())
                         }
                     });
 
@@ -155,51 +167,129 @@ fn get_serde_rename_all(attrs: &[syn::Attribute]) -> Option<String> {
     None
 }
 
+/// Detect if a name is in snake_case format
+fn is_snake_case(name: &str) -> bool {
+    name.contains('_')
+}
+
 /// Apply serde rename_all transformation
 fn apply_rename_rule(name: &str, rule: &str) -> String {
     match rule {
         "lowercase" => name.to_lowercase(),
         "UPPERCASE" => name.to_uppercase(),
-        "PascalCase" => name.to_string(), // Already PascalCase
+        "PascalCase" => {
+            if is_snake_case(name) {
+                snake_to_pascal(name)
+            } else {
+                name.to_string() // Already PascalCase
+            }
+        }
         "camelCase" => {
-            let mut chars = name.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => first.to_lowercase().chain(chars).collect(),
+            if is_snake_case(name) {
+                snake_to_camel(name)
+            } else {
+                pascal_to_camel(name)
             }
         }
         "snake_case" => {
-            let mut result = String::new();
-            for (i, ch) in name.chars().enumerate() {
-                if ch.is_uppercase() && i > 0 {
-                    result.push('_');
-                }
-                result.push(ch.to_lowercase().next().unwrap());
+            if is_snake_case(name) {
+                name.to_string() // Already snake_case
+            } else {
+                pascal_to_snake(name)
             }
-            result
         }
         "SCREAMING_SNAKE_CASE" => {
-            let mut result = String::new();
-            for (i, ch) in name.chars().enumerate() {
-                if ch.is_uppercase() && i > 0 {
-                    result.push('_');
-                }
-                result.push(ch.to_uppercase().next().unwrap());
+            if is_snake_case(name) {
+                name.to_uppercase()
+            } else {
+                pascal_to_screaming_snake(name)
             }
-            result
         }
         "kebab-case" => {
-            let mut result = String::new();
-            for (i, ch) in name.chars().enumerate() {
-                if ch.is_uppercase() && i > 0 {
-                    result.push('-');
-                }
-                result.push(ch.to_lowercase().next().unwrap());
+            if is_snake_case(name) {
+                name.replace('_', "-")
+            } else {
+                pascal_to_kebab(name)
             }
-            result
         }
         _ => name.to_string(), // Unknown rule, keep as-is
     }
+}
+
+/// Convert snake_case to PascalCase
+fn snake_to_pascal(name: &str) -> String {
+    name.split('_')
+        .filter(|s| !s.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+            }
+        })
+        .collect()
+}
+
+/// Convert snake_case to camelCase
+fn snake_to_camel(name: &str) -> String {
+    let parts: Vec<&str> = name.split('_').filter(|s| !s.is_empty()).collect();
+    if parts.is_empty() {
+        return String::new();
+    }
+
+    let mut result = parts[0].to_lowercase();
+    for part in &parts[1..] {
+        let mut chars = part.chars();
+        if let Some(first) = chars.next() {
+            result.push_str(&first.to_uppercase().chain(chars).collect::<String>());
+        }
+    }
+    result
+}
+
+/// Convert PascalCase to camelCase
+fn pascal_to_camel(name: &str) -> String {
+    let mut chars = name.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => first.to_lowercase().chain(chars).collect(),
+    }
+}
+
+/// Convert PascalCase to snake_case
+fn pascal_to_snake(name: &str) -> String {
+    let mut result = String::new();
+    for (i, ch) in name.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(ch.to_lowercase().next().unwrap());
+    }
+    result
+}
+
+/// Convert PascalCase to SCREAMING_SNAKE_CASE
+fn pascal_to_screaming_snake(name: &str) -> String {
+    let mut result = String::new();
+    for (i, ch) in name.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(ch.to_uppercase().next().unwrap());
+    }
+    result
+}
+
+/// Convert PascalCase to kebab-case
+fn pascal_to_kebab(name: &str) -> String {
+    let mut result = String::new();
+    for (i, ch) in name.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            result.push('-');
+        }
+        result.push(ch.to_lowercase().next().unwrap());
+    }
+    result
 }
 
 fn impl_to_schema(_name: &Ident, _data: &Data) -> proc_macro2::TokenStream {
