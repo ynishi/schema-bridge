@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Schema {
@@ -13,6 +15,10 @@ pub enum Schema {
     Union(Vec<Schema>),
     Tuple(Vec<Schema>),
     Ref(String), // Reference to another type
+    Record {
+        key: Box<Schema>,
+        value: Box<Schema>,
+    }, // For HashMap/Record types
                  // For complex enums, we might need more structure, but let's start simple
                  // or maybe just use a custom "Type" definition
 }
@@ -74,6 +80,31 @@ impl<T: SchemaBridge> SchemaBridge for Vec<T> {
     }
     fn to_schema() -> Schema {
         Schema::Array(Box::new(T::to_schema()))
+    }
+}
+
+impl SchemaBridge for PathBuf {
+    fn to_ts() -> String {
+        "string".to_string()
+    }
+    fn to_schema() -> Schema {
+        Schema::String
+    }
+}
+
+impl<K, V> SchemaBridge for HashMap<K, V>
+where
+    K: SchemaBridge,
+    V: SchemaBridge,
+{
+    fn to_ts() -> String {
+        format!("Record<{}, {}>", K::to_ts(), V::to_ts())
+    }
+    fn to_schema() -> Schema {
+        Schema::Record {
+            key: Box::new(K::to_schema()),
+            value: Box::new(V::to_schema()),
+        }
     }
 }
 
@@ -173,5 +204,47 @@ mod tests {
 
         let schema = Schema::Array(Box::new(Schema::Number));
         assert!(matches!(schema, Schema::Array(_)));
+    }
+
+    #[test]
+    fn test_pathbuf_to_ts() {
+        assert_eq!(PathBuf::to_ts(), "string");
+    }
+
+    #[test]
+    fn test_pathbuf_to_schema() {
+        assert_eq!(PathBuf::to_schema(), Schema::String);
+    }
+
+    #[test]
+    fn test_hashmap_to_ts() {
+        assert_eq!(HashMap::<String, i32>::to_ts(), "Record<string, number>");
+        assert_eq!(HashMap::<String, String>::to_ts(), "Record<string, string>");
+    }
+
+    #[test]
+    fn test_hashmap_to_schema() {
+        let schema = HashMap::<String, i32>::to_schema();
+        assert!(matches!(schema, Schema::Record { .. }));
+        if let Schema::Record { key, value } = schema {
+            assert_eq!(*key, Schema::String);
+            assert_eq!(*value, Schema::Number);
+        }
+    }
+
+    #[test]
+    fn test_nested_hashmap() {
+        assert_eq!(
+            HashMap::<String, Vec::<String>>::to_ts(),
+            "Record<string, string[]>"
+        );
+    }
+
+    #[test]
+    fn test_optional_hashmap() {
+        assert_eq!(
+            Option::<HashMap::<String, i32>>::to_ts(),
+            "Record<string, number> | null"
+        );
     }
 }
