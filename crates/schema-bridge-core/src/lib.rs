@@ -8,21 +8,82 @@ use std::sync::Arc;
 pub enum Schema {
     String,
     Number,
+    Integer,
     Boolean,
     Null,
     Any,
     Array(Box<Schema>),
-    Object(Vec<(String, Schema)>),
-    Enum(Vec<String>), // Simple string enum
+    Object(Vec<Field>),
+    Enum(Vec<String>),
     Union(Vec<Schema>),
     Tuple(Vec<Schema>),
-    Ref(String), // Reference to another type
+    Ref(String),
     Record {
         key: Box<Schema>,
         value: Box<Schema>,
-    }, // For HashMap/Record types
-                 // For complex enums, we might need more structure, but let's start simple
-                 // or maybe just use a custom "Type" definition
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Field {
+    pub name: String,
+    pub schema: Schema,
+    pub required: bool,
+    pub constraints: Constraints,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct Constraints {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_len: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_len: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_of: Option<Vec<String>>,
+}
+
+impl Field {
+    pub fn new(name: impl Into<String>, schema: Schema) -> Self {
+        Self {
+            name: name.into(),
+            schema,
+            required: true,
+            constraints: Constraints::default(),
+        }
+    }
+
+    pub fn optional(name: impl Into<String>, schema: Schema) -> Self {
+        Self {
+            name: name.into(),
+            schema,
+            required: false,
+            constraints: Constraints::default(),
+        }
+    }
+}
+
+impl Schema {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Schema::String => "string",
+            Schema::Number => "number",
+            Schema::Integer => "integer",
+            Schema::Boolean => "boolean",
+            Schema::Null => "nil",
+            Schema::Any => "any",
+            Schema::Array(_) => "table",
+            Schema::Object(_) => "table",
+            Schema::Enum(_) => "string",
+            Schema::Union(_) => "any",
+            Schema::Tuple(_) => "table",
+            Schema::Ref(_) => "table",
+            Schema::Record { .. } => "table",
+        }
+    }
 }
 
 pub trait SchemaBridge {
@@ -45,7 +106,7 @@ impl SchemaBridge for i32 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -67,13 +128,12 @@ impl SchemaBridge for bool {
     }
 }
 
-// Implement for all integer types
 impl SchemaBridge for i8 {
     fn to_ts() -> String {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -82,7 +142,7 @@ impl SchemaBridge for i16 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -91,7 +151,7 @@ impl SchemaBridge for i64 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -100,7 +160,7 @@ impl SchemaBridge for i128 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -109,7 +169,7 @@ impl SchemaBridge for isize {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -118,7 +178,7 @@ impl SchemaBridge for u8 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -127,7 +187,7 @@ impl SchemaBridge for u16 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -136,7 +196,7 @@ impl SchemaBridge for u32 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -145,7 +205,7 @@ impl SchemaBridge for u64 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -154,7 +214,7 @@ impl SchemaBridge for u128 {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -163,7 +223,7 @@ impl SchemaBridge for usize {
         "number".to_string()
     }
     fn to_schema() -> Schema {
-        Schema::Number
+        Schema::Integer
     }
 }
 
@@ -444,6 +504,84 @@ macro_rules! export_types {
     }};
 }
 
+// --- mlua integration ---
+
+#[cfg(feature = "mlua")]
+mod lua {
+    use super::*;
+    use mlua::prelude::*;
+
+    impl Schema {
+        /// Convert this schema to a Lua table compatible with
+        /// `mlua_batteries::validate::check()`.
+        ///
+        /// For `Schema::Object`, produces a table where each key maps to
+        /// either a type-name string (shorthand) or a full constraint table.
+        pub fn to_lua_table(&self, lua: &Lua) -> LuaResult<LuaValue> {
+            match self {
+                Schema::Object(fields) => {
+                    let t = lua.create_table()?;
+                    for field in fields {
+                        let value = field_to_lua_value(lua, field)?;
+                        t.set(field.name.as_str(), value)?;
+                    }
+                    Ok(LuaValue::Table(t))
+                }
+                _ => {
+                    // Non-object schemas: return the type name string
+                    Ok(LuaValue::String(lua.create_string(self.type_name())?))
+                }
+            }
+        }
+    }
+
+    fn field_to_lua_value(lua: &Lua, field: &Field) -> LuaResult<LuaValue> {
+        let has_constraints = field.constraints.min.is_some()
+            || field.constraints.max.is_some()
+            || field.constraints.min_len.is_some()
+            || field.constraints.max_len.is_some()
+            || field.constraints.one_of.is_some();
+
+        // Use shorthand format when: not required AND no constraints
+        // (shorthand means the field is optional with just a type check)
+        if !field.required && !has_constraints {
+            return Ok(LuaValue::String(
+                lua.create_string(field.schema.type_name())?,
+            ));
+        }
+
+        // Full format: { type = "...", required = true/false, ... }
+        let t = lua.create_table()?;
+        t.set("type", field.schema.type_name())?;
+
+        if field.required {
+            t.set("required", true)?;
+        }
+
+        if let Some(min) = field.constraints.min {
+            t.set("min", min)?;
+        }
+        if let Some(max) = field.constraints.max {
+            t.set("max", max)?;
+        }
+        if let Some(min_len) = field.constraints.min_len {
+            t.set("min_len", min_len as i64)?;
+        }
+        if let Some(max_len) = field.constraints.max_len {
+            t.set("max_len", max_len as i64)?;
+        }
+        if let Some(ref one_of) = field.constraints.one_of {
+            let arr = lua.create_table()?;
+            for (i, val) in one_of.iter().enumerate() {
+                arr.set(i + 1, val.as_str())?;
+            }
+            t.set("one_of", arr)?;
+        }
+
+        Ok(LuaValue::Table(t))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -514,6 +652,20 @@ mod tests {
     }
 
     #[test]
+    fn test_integer_schema() {
+        assert_eq!(i32::to_schema(), Schema::Integer);
+        assert_eq!(u64::to_schema(), Schema::Integer);
+        assert_eq!(i8::to_schema(), Schema::Integer);
+        assert_eq!(usize::to_schema(), Schema::Integer);
+    }
+
+    #[test]
+    fn test_float_schema() {
+        assert_eq!(f32::to_schema(), Schema::Number);
+        assert_eq!(f64::to_schema(), Schema::Number);
+    }
+
+    #[test]
     fn test_pathbuf_to_ts() {
         assert_eq!(PathBuf::to_ts(), "string");
     }
@@ -535,7 +687,7 @@ mod tests {
         assert!(matches!(schema, Schema::Record { .. }));
         if let Schema::Record { key, value } = schema {
             assert_eq!(*key, Schema::String);
-            assert_eq!(*value, Schema::Number);
+            assert_eq!(*value, Schema::Integer);
         }
     }
 
@@ -637,7 +789,7 @@ mod tests {
         if let Schema::Union(types) = schema {
             assert_eq!(types.len(), 2);
             assert_eq!(types[0], Schema::String);
-            assert_eq!(types[1], Schema::Number);
+            assert_eq!(types[1], Schema::Integer);
         }
     }
 
@@ -673,7 +825,7 @@ mod tests {
         if let Schema::Tuple(types) = schema {
             assert_eq!(types.len(), 2);
             assert_eq!(types[0], Schema::String);
-            assert_eq!(types[1], Schema::Number);
+            assert_eq!(types[1], Schema::Integer);
         } else {
             panic!("Expected Tuple schema");
         }
@@ -688,5 +840,148 @@ mod tests {
             HashMap::<String, Vec::<i32>>::to_ts(),
             "Record<string, number[]>"
         );
+    }
+
+    // Test Field and Constraints
+    #[test]
+    fn test_field_new() {
+        let f = Field::new("name", Schema::String);
+        assert_eq!(f.name, "name");
+        assert!(f.required);
+        assert_eq!(f.constraints, Constraints::default());
+    }
+
+    #[test]
+    fn test_field_optional() {
+        let f = Field::optional("email", Schema::String);
+        assert!(!f.required);
+    }
+
+    #[test]
+    fn test_schema_type_name() {
+        assert_eq!(Schema::String.type_name(), "string");
+        assert_eq!(Schema::Number.type_name(), "number");
+        assert_eq!(Schema::Integer.type_name(), "integer");
+        assert_eq!(Schema::Boolean.type_name(), "boolean");
+        assert_eq!(Schema::Null.type_name(), "nil");
+        assert_eq!(Schema::Any.type_name(), "any");
+    }
+
+    #[test]
+    fn test_object_schema() {
+        let schema = Schema::Object(vec![
+            Field::new("name", Schema::String),
+            Field::optional("age", Schema::Integer),
+        ]);
+        if let Schema::Object(fields) = &schema {
+            assert_eq!(fields.len(), 2);
+            assert_eq!(fields[0].name, "name");
+            assert!(fields[0].required);
+            assert_eq!(fields[1].name, "age");
+            assert!(!fields[1].required);
+        } else {
+            panic!("Expected Object schema");
+        }
+    }
+
+    #[test]
+    fn test_constraints_with_values() {
+        let c = Constraints {
+            min: Some(0.0),
+            max: Some(100.0),
+            min_len: None,
+            max_len: Some(255),
+            one_of: None,
+        };
+        assert_eq!(c.min, Some(0.0));
+        assert_eq!(c.max, Some(100.0));
+        assert_eq!(c.max_len, Some(255));
+    }
+}
+
+#[cfg(all(test, feature = "mlua"))]
+mod lua_tests {
+    use super::*;
+    use mlua::prelude::*;
+
+    #[test]
+    fn to_lua_table_simple_object() {
+        let lua = Lua::new();
+        let schema = Schema::Object(vec![
+            Field::new("name", Schema::String),
+            Field::optional("bio", Schema::String),
+        ]);
+
+        let value = schema.to_lua_table(&lua).unwrap();
+        let table = value.as_table().unwrap();
+
+        // "name" is required → full format
+        let name_val: LuaTable = table.get("name").unwrap();
+        let name_type: String = name_val.get("type").unwrap();
+        assert_eq!(name_type, "string");
+        let name_req: bool = name_val.get("required").unwrap();
+        assert!(name_req);
+
+        // "bio" is optional, no constraints → shorthand
+        let bio_val: String = table.get("bio").unwrap();
+        assert_eq!(bio_val, "string");
+    }
+
+    #[test]
+    fn to_lua_table_with_constraints() {
+        let lua = Lua::new();
+        let schema = Schema::Object(vec![Field {
+            name: "age".into(),
+            schema: Schema::Integer,
+            required: true,
+            constraints: Constraints {
+                min: Some(0.0),
+                max: Some(150.0),
+                ..Default::default()
+            },
+        }]);
+
+        let value = schema.to_lua_table(&lua).unwrap();
+        let table = value.as_table().unwrap();
+
+        let age: LuaTable = table.get("age").unwrap();
+        let age_type: String = age.get("type").unwrap();
+        assert_eq!(age_type, "integer");
+        let age_min: f64 = age.get("min").unwrap();
+        assert!((age_min - 0.0).abs() < f64::EPSILON);
+        let age_max: f64 = age.get("max").unwrap();
+        assert!((age_max - 150.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn to_lua_table_with_one_of() {
+        let lua = Lua::new();
+        let schema = Schema::Object(vec![Field {
+            name: "status".into(),
+            schema: Schema::String,
+            required: true,
+            constraints: Constraints {
+                one_of: Some(vec!["active".into(), "inactive".into()]),
+                ..Default::default()
+            },
+        }]);
+
+        let value = schema.to_lua_table(&lua).unwrap();
+        let table = value.as_table().unwrap();
+
+        let status: LuaTable = table.get("status").unwrap();
+        let one_of: LuaTable = status.get("one_of").unwrap();
+        let v1: String = one_of.get(1).unwrap();
+        let v2: String = one_of.get(2).unwrap();
+        assert_eq!(v1, "active");
+        assert_eq!(v2, "inactive");
+    }
+
+    #[test]
+    fn to_lua_table_non_object_returns_string() {
+        let lua = Lua::new();
+        let value = Schema::String.to_lua_table(&lua).unwrap();
+        let s = value.as_string().map(|s| s.to_string_lossy()).unwrap();
+        assert_eq!(s, "string");
     }
 }

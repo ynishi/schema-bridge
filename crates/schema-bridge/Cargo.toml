@@ -10,6 +10,10 @@ keywords = ["typescript", "codegen", "tauri", "bridge", "types"]
 categories = ["development-tools", "web-programming"]
 readme = "../../README.md"
 
+[features]
+default = []
+mlua = ["schema-bridge-core/mlua"]
+
 [dependencies]
 schema-bridge-core = { version = "0.3.0", path = "../schema-bridge-core" }
 schema-bridge-macro = { version = "0.3.0", path = "../schema-bridge-macro" }

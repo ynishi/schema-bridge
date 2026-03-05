@@ -1,14 +1,17 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, Lit, Meta};
+use syn::{
+    parse::Parse, parse_macro_input, punctuated::Punctuated, Data, DeriveInput, Fields, Ident, Lit,
+    Meta, Token, Type,
+};
 
-#[proc_macro_derive(SchemaBridge, attributes(schema_bridge, serde))]
+#[proc_macro_derive(SchemaBridge, attributes(schema_bridge, schema, serde))]
 pub fn derive_schema_bridge(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
 
     let ts_impl = impl_to_ts(&input);
-    let schema_impl = impl_to_schema(name, &input.data);
+    let schema_impl = impl_to_schema(name, &input);
 
     // Check for string_conversion attribute
     let string_conversion = has_string_conversion(&input.attrs);
@@ -292,10 +295,227 @@ fn pascal_to_kebab(name: &str) -> String {
     result
 }
 
-fn impl_to_schema(_name: &Ident, _data: &Data) -> proc_macro2::TokenStream {
-    // Placeholder for now, focusing on TS generation first
-    quote! {
-        ::schema_bridge::Schema::Any
+/// Parse #[schema(...)] attributes on a field.
+///
+/// Supported: required, min = N, max = N, min_len = N, max_len = N, one_of("a", "b", ...)
+#[derive(Default)]
+struct SchemaFieldAttrs {
+    required: Option<bool>,
+    min: Option<f64>,
+    max: Option<f64>,
+    min_len: Option<usize>,
+    max_len: Option<usize>,
+    one_of: Option<Vec<String>>,
+}
+
+fn parse_schema_attrs(attrs: &[syn::Attribute]) -> SchemaFieldAttrs {
+    let mut result = SchemaFieldAttrs::default();
+
+    for attr in attrs {
+        if !attr.path().is_ident("schema") {
+            continue;
+        }
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("required") {
+                result.required = Some(true);
+                return Ok(());
+            }
+            if meta.path.is_ident("min") {
+                let value = meta.value()?;
+                let lit: Lit = value.parse()?;
+                if let Lit::Float(f) = &lit {
+                    result.min = Some(f.base10_parse::<f64>()?);
+                } else if let Lit::Int(i) = &lit {
+                    result.min = Some(i.base10_parse::<f64>()?);
+                }
+                return Ok(());
+            }
+            if meta.path.is_ident("max") {
+                let value = meta.value()?;
+                let lit: Lit = value.parse()?;
+                if let Lit::Float(f) = &lit {
+                    result.max = Some(f.base10_parse::<f64>()?);
+                } else if let Lit::Int(i) = &lit {
+                    result.max = Some(i.base10_parse::<f64>()?);
+                }
+                return Ok(());
+            }
+            if meta.path.is_ident("min_len") {
+                let value = meta.value()?;
+                let lit: Lit = value.parse()?;
+                if let Lit::Int(i) = &lit {
+                    result.min_len = Some(i.base10_parse::<usize>()?);
+                }
+                return Ok(());
+            }
+            if meta.path.is_ident("max_len") {
+                let value = meta.value()?;
+                let lit: Lit = value.parse()?;
+                if let Lit::Int(i) = &lit {
+                    result.max_len = Some(i.base10_parse::<usize>()?);
+                }
+                return Ok(());
+            }
+            if meta.path.is_ident("one_of") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let lits: Punctuated<Lit, Token![,]> =
+                    content.parse_terminated(Lit::parse, Token![,])?;
+                let values: Vec<String> = lits
+                    .into_iter()
+                    .filter_map(|lit| {
+                        if let Lit::Str(s) = lit {
+                            Some(s.value())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if !values.is_empty() {
+                    result.one_of = Some(values);
+                }
+                return Ok(());
+            }
+            Err(meta.error("unknown schema attribute"))
+        });
+    }
+
+    result
+}
+
+/// Check if a type is Option<T> and return the inner type T
+fn extract_option_inner(ty: &Type) -> Option<&Type> {
+    if let Type::Path(type_path) = ty {
+        let segment = type_path.path.segments.last()?;
+        if segment.ident == "Option" {
+            if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                if let Some(syn::GenericArgument::Type(inner)) = args.args.first() {
+                    return Some(inner);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn impl_to_schema(_name: &Ident, input: &DeriveInput) -> proc_macro2::TokenStream {
+    match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => {
+                let rename_all = get_serde_rename_all(&input.attrs);
+
+                let field_exprs = fields.named.iter().map(|f| {
+                    let field_ident = f.ident.as_ref().unwrap();
+                    let field_str = field_ident.to_string();
+                    let ty = &f.ty;
+                    let schema_attrs = parse_schema_attrs(&f.attrs);
+
+                    let field_name = if let Some(ref rule) = rename_all {
+                        apply_rename_rule(&field_str, rule)
+                    } else {
+                        field_str
+                    };
+
+                    // Determine if Option<T> and extract inner type
+                    let (schema_expr, is_option) = if let Some(inner) = extract_option_inner(ty) {
+                        (
+                            quote! { <#inner as ::schema_bridge::SchemaBridge>::to_schema() },
+                            true,
+                        )
+                    } else {
+                        (
+                            quote! { <#ty as ::schema_bridge::SchemaBridge>::to_schema() },
+                            false,
+                        )
+                    };
+
+                    // Required: explicit #[schema(required)] > Option detection > default true
+                    let required = match schema_attrs.required {
+                        Some(r) => r,
+                        None => !is_option,
+                    };
+
+                    // Build constraints
+                    let min_expr = match schema_attrs.min {
+                        Some(v) => quote! { Some(#v) },
+                        None => quote! { None },
+                    };
+                    let max_expr = match schema_attrs.max {
+                        Some(v) => quote! { Some(#v) },
+                        None => quote! { None },
+                    };
+                    let min_len_expr = match schema_attrs.min_len {
+                        Some(v) => quote! { Some(#v) },
+                        None => quote! { None },
+                    };
+                    let max_len_expr = match schema_attrs.max_len {
+                        Some(v) => quote! { Some(#v) },
+                        None => quote! { None },
+                    };
+                    let one_of_expr = match &schema_attrs.one_of {
+                        Some(vals) => {
+                            let lit_vals = vals.iter().map(|s| quote! { #s.to_string() });
+                            quote! { Some(vec![#(#lit_vals),*]) }
+                        }
+                        None => quote! { None },
+                    };
+
+                    quote! {
+                        ::schema_bridge::Field {
+                            name: #field_name.to_string(),
+                            schema: #schema_expr,
+                            required: #required,
+                            constraints: ::schema_bridge::Constraints {
+                                min: #min_expr,
+                                max: #max_expr,
+                                min_len: #min_len_expr,
+                                max_len: #max_len_expr,
+                                one_of: #one_of_expr,
+                            },
+                        }
+                    }
+                });
+
+                quote! {
+                    ::schema_bridge::Schema::Object(vec![
+                        #(#field_exprs),*
+                    ])
+                }
+            }
+            Fields::Unnamed(fields) => {
+                if fields.unnamed.len() == 1 {
+                    let inner_ty = &fields.unnamed[0].ty;
+                    quote! {
+                        <#inner_ty as ::schema_bridge::SchemaBridge>::to_schema()
+                    }
+                } else {
+                    let types = fields.unnamed.iter().map(|f| {
+                        let ty = &f.ty;
+                        quote! { <#ty as ::schema_bridge::SchemaBridge>::to_schema() }
+                    });
+                    quote! {
+                        ::schema_bridge::Schema::Tuple(vec![#(#types),*])
+                    }
+                }
+            }
+            Fields::Unit => quote! { ::schema_bridge::Schema::Null },
+        },
+        Data::Enum(data) => {
+            let rename_all = get_serde_rename_all(&input.attrs);
+            let variants = data.variants.iter().map(|v| {
+                let variant_str = v.ident.to_string();
+                let display_name = if let Some(ref rule) = rename_all {
+                    apply_rename_rule(&variant_str, rule)
+                } else {
+                    variant_str
+                };
+                quote! { #display_name.to_string() }
+            });
+            quote! {
+                ::schema_bridge::Schema::Enum(vec![#(#variants),*])
+            }
+        }
+        _ => quote! { ::schema_bridge::Schema::Any },
     }
 }
 
