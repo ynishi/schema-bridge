@@ -1,6 +1,6 @@
 [package]
 name = "schema-bridge"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Yutaka Nishimura <ytk.nishimura@gmail.com>"]
 description = "Generate TypeScript type definitions from Rust types - perfect for Tauri applications"
@@ -15,8 +15,8 @@ default = []
 mlua = ["schema-bridge-core/mlua"]
 
 [dependencies]
-schema-bridge-core = { version = "0.3.0", path = "../schema-bridge-core" }
-schema-bridge-macro = { version = "0.3.0", path = "../schema-bridge-macro" }
+schema-bridge-core = { version = "0.4.0", path = "../schema-bridge-core" }
+schema-bridge-macro = { version = "0.4.0", path = "../schema-bridge-macro" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
